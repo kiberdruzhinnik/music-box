@@ -1,0 +1,24 @@
+services:
+  sb2p:
+    build:
+      context: .
+      args:
+        # Stable sing-box release baked into the image at build time.
+        SING_BOX_VERSION: "${SING_BOX_VERSION:-1.14.1}"
+        # Git ref, tag, or commit from nichind/singbox2proxy.
+        SB2P_REF: "${SB2P_REF:-main}"
+    image: local/singbox2proxy:latest
+    container_name: singbox2proxy
+    restart: unless-stopped
+
+    # Pass UPSTREAM_URL from .env literally instead of interpolating the URL
+    # into this Compose file. This is safer for URLs containing &, #, ?, etc.
+    env_file:
+      - .env
+
+    ports:
+      # Default to localhost only so this does not accidentally become an
+      # unauthenticated LAN/WAN proxy. Set BIND_ADDRESS=0.0.0.0 deliberately
+      # if another machine (for example a router) must connect to it.
+      - "${BIND_ADDRESS:-127.0.0.1}:${SOCKS5_PORT:-1080}:1080/tcp"
+      - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:8080/tcp"
