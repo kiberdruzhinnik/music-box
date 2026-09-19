@@ -66,6 +66,7 @@ COUNTRY_REGEX = os.getenv("COUNTRY_REGEX", "").strip()
 REVERSE_MATCHES = env_bool("REVERSE_MATCHES", True)
 SUBSCRIPTION_REFRESH_SECONDS = env_int("SUBSCRIPTION_REFRESH_SECONDS", 3600, 10)
 PROBE_INTERVAL_SECONDS = env_int("PROBE_INTERVAL_SECONDS", 300, 10)
+HEALTHCHECK_INTERVAL_SECONDS = env_int("HEALTHCHECK_INTERVAL_SECONDS", 60, 5)
 PROBE_TIMEOUT_SECONDS = env_int("PROBE_TIMEOUT_SECONDS", 8, 1)
 PROBE_ATTEMPTS = env_int("PROBE_ATTEMPTS", 2, 1)
 PROBE_CONCURRENCY = env_int("PROBE_CONCURRENCY", 4, 1)
@@ -632,14 +633,27 @@ def choose_and_activate(working: list[ProbeResult]) -> None:
     log("all benchmarked candidates failed activation")
 
 
+def failover_from_ranking(working: list[ProbeResult], failed_url: str | None) -> bool:
+    if not working:
+        return False
+
+    for result in working:
+        if failed_url and result.candidate.url == failed_url:
+            continue
+        log(f"failover candidate: {result.candidate.name} at last RTT {result.rtt_ms:.1f} ms")
+        if activate(result.candidate):
+            return True
+    return False
+
+
 def direct_mode() -> int:
     candidate = Candidate(0, UPSTREAM_URL, candidate_name(UPSTREAM_URL))
     log(f"direct mode; starting {candidate.name}")
     if not activate(candidate):
         return 1
-    while not stop_event.wait(PROBE_INTERVAL_SECONDS):
+    while not stop_event.wait(HEALTHCHECK_INTERVAL_SECONDS):
         if active_process is None or active_process.poll() is not None:
-            log("active sb2p exited; restarting")
+            log("active proxy exited; restarting")
             activate(candidate)
             continue
         try:
@@ -654,8 +668,10 @@ def direct_mode() -> int:
 def subscription_mode() -> int:
     urls: list[str] = []
     candidates: list[Candidate] = []
+    working_ranking: list[ProbeResult] = []
     next_refresh = 0.0
     next_probe = 0.0
+    next_healthcheck = 0.0
 
     while not stop_event.is_set():
         now = time.monotonic()
@@ -672,7 +688,7 @@ def subscription_mode() -> int:
                 )
                 for pos, candidate in enumerate(candidates, 1):
                     log(f"candidate {pos:02d}: {candidate.name}")
-                next_probe = 0.0  # immediately re-evaluate after subscription changes
+                next_probe = 0.0
             except Exception as exc:
                 log(f"subscription refresh failed: {exc}")
             finally:
@@ -681,25 +697,49 @@ def subscription_mode() -> int:
         now = time.monotonic()
         if candidates and now >= next_probe:
             try:
-                working = benchmark(candidates)
-                choose_and_activate(working)
+                working_ranking = benchmark(candidates)
+                choose_and_activate(working_ranking)
+                next_healthcheck = time.monotonic() + HEALTHCHECK_INTERVAL_SECONDS
             except Exception as exc:
                 log(f"benchmark cycle failed: {exc}")
             finally:
                 next_probe = time.monotonic() + PROBE_INTERVAL_SECONDS
 
-        # If active sb2p crashes, force an immediate benchmark/failover.
+        now = time.monotonic()
         if active_process is not None and active_process.poll() is not None:
-            log(f"active sb2p exited with status {active_process.returncode}; scheduling immediate failover")
-            # Do not clear active_url here; activate() will replace state.
-            next_probe = 0.0
+            failed_url = active_url
+            failed_name = active_name or "active node"
+            log(f"{failed_name} process exited with status {active_process.returncode}; trying next ranked node")
+            if not failover_from_ranking(working_ranking, failed_url):
+                log("no ranked failover candidate succeeded; scheduling immediate benchmark")
+                next_probe = 0.0
+            next_healthcheck = time.monotonic() + HEALTHCHECK_INTERVAL_SECONDS
 
-        wake_at = min(next_refresh, next_probe if candidates else next_refresh)
+        now = time.monotonic()
+        if active_process is not None and active_process.poll() is None and now >= next_healthcheck:
+            failed_url = active_url
+            failed_name = active_name or "active node"
+            try:
+                rtt = verify_active()
+                log(f"active healthcheck OK   {rtt:.1f} ms  {failed_name}")
+            except Exception as exc:
+                log(f"active healthcheck FAIL          {failed_name}: {exc}")
+                if not failover_from_ranking(working_ranking, failed_url):
+                    log("no ranked failover candidate succeeded; scheduling immediate benchmark")
+                    next_probe = 0.0
+            finally:
+                next_healthcheck = time.monotonic() + HEALTHCHECK_INTERVAL_SECONDS
+
+        wake_times = [next_refresh]
+        if candidates:
+            wake_times.append(next_probe)
+        if active_process is not None:
+            wake_times.append(next_healthcheck)
+        wake_at = min(wake_times)
         sleep_for = max(0.2, min(2.0, wake_at - time.monotonic()))
         stop_event.wait(sleep_for)
 
     return 0
-
 
 def main() -> int:
     if bool(SUBSCRIPTION_URL) == bool(UPSTREAM_URL):
@@ -708,7 +748,7 @@ def main() -> int:
 
     log(
         f"probe target={TEST_URL}; subscription_refresh={SUBSCRIPTION_REFRESH_SECONDS}s; "
-        f"probe_interval={PROBE_INTERVAL_SECONDS}s"
+        f"probe_interval={PROBE_INTERVAL_SECONDS}s; healthcheck_interval={HEALTHCHECK_INTERVAL_SECONDS}s"
     )
     if SUBSCRIPTION_URL:
         return subscription_mode()
