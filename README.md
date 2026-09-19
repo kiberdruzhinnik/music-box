@@ -40,6 +40,7 @@ TCP_TEST_URL=https://www.gstatic.com/generate_204
 PROBE_TIMEOUT_SECONDS=8
 PROBE_ATTEMPTS=2
 PROBE_CONCURRENCY=4
+UNAVAILABLE_RETRY_SECONDS=30
 SOCKS5_PORT=10800
 HTTP_PORT=10801
 BIND_ADDRESS=0.0.0.0
@@ -77,26 +78,6 @@ Probe subprocess output is captured and only emitted when a temporary `sb2p` pro
 If all nodes fail before the HTTP GET, the log will now contain the underlying `sb2p`/sing-box startup error instead of only `listener did not start`.
 
 
-## Shadowsocks v2ray-plugin support
-
-The image also bakes `v2ray-plugin` into `/usr/local/bin/v2ray-plugin` at build time.
-This fixes subscription entries such as `ss://...` with `plugin=v2ray-plugin`, including
-WebSocket/TLS plugin options. No plugin download occurs when the container starts.
-
-The version is configurable at image build time:
-
-```dotenv
-V2RAY_PLUGIN_VERSION=1.3.2
-```
-
-After changing the plugin version, rebuild the image:
-
-```bash
-docker compose build --no-cache
-docker compose up -d
-```
-
-
 ## Shadowsocks v2ray-plugin compatibility
 
 Some SIP002 subscriptions encode the plugin and its options in a single query value, for example:
@@ -130,3 +111,16 @@ HEALTHCHECK_INTERVAL_SECONDS=30
 ```
 
 This benchmarks all matching subscription nodes once per hour, but checks the selected active node every 30 seconds and fails over without waiting for the next full benchmark.
+
+## No available upstreams
+
+If no subscription candidate works, or a failed active node has no healthy
+ranked fallback, the supervisor refreshes the subscription and benchmarks again
+after `UNAVAILABLE_RETRY_SECONDS` (30 seconds by default), rather than waiting
+for the regular refresh or probe interval. In direct mode, a startup or restart
+failure exits the container so Docker's `unless-stopped` policy retries it.
+
+The image health check performs the configured HTTP 204 probe through the
+active local HTTP proxy. It reports unhealthy when there is no active listener
+or its upstream cannot complete the probe. This makes an unavailable upstream
+visible to Docker and orchestration systems.

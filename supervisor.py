@@ -71,6 +71,7 @@ PROBE_TIMEOUT_SECONDS = env_int("PROBE_TIMEOUT_SECONDS", 8, 1)
 PROBE_ATTEMPTS = env_int("PROBE_ATTEMPTS", 2, 1)
 PROBE_CONCURRENCY = env_int("PROBE_CONCURRENCY", 4, 1)
 MAX_CANDIDATES = env_int("MAX_CANDIDATES", 0, 0)
+UNAVAILABLE_RETRY_SECONDS = env_int("UNAVAILABLE_RETRY_SECONDS", 30, 5)
 TEST_URL = os.getenv("TCP_TEST_URL", os.getenv("TEST_URL", "https://www.gstatic.com/generate_204")).strip()
 SUBSCRIPTION_USER_AGENT = os.getenv("SUBSCRIPTION_USER_AGENT", "singbox2proxy-supervisor/1.0").strip()
 SB2P_INTERNAL_SOCKS_PORT = env_int("SB2P_INTERNAL_SOCKS_PORT", 11080, 1)
@@ -569,6 +570,16 @@ def verify_active() -> float:
     return http_probe_via_proxy(SB2P_INTERNAL_HTTP_PORT)
 
 
+def active_proxy_is_running() -> bool:
+    return active_process is not None and active_process.poll() is None
+
+
+def schedule_unavailable_retry() -> tuple[float, float]:
+    """Return refresh/probe deadlines while no usable active proxy exists."""
+    retry_at = time.monotonic() + UNAVAILABLE_RETRY_SECONDS
+    return retry_at, retry_at
+
+
 def activate(candidate: Candidate) -> bool:
     global active_process, active_url, active_name, active_config_path
 
@@ -677,6 +688,7 @@ def subscription_mode() -> int:
         now = time.monotonic()
 
         if now >= next_refresh:
+            refresh_delay = SUBSCRIPTION_REFRESH_SECONDS
             try:
                 fetched = fetch_subscription()
                 filtered = filter_candidates(fetched)
@@ -691,19 +703,33 @@ def subscription_mode() -> int:
                 next_probe = 0.0
             except Exception as exc:
                 log(f"subscription refresh failed: {exc}")
+                if not active_proxy_is_running():
+                    refresh_delay = UNAVAILABLE_RETRY_SECONDS
+                    log(
+                        "no active upstream proxy is available; retrying subscription refresh "
+                        f"in {UNAVAILABLE_RETRY_SECONDS}s"
+                    )
             finally:
-                next_refresh = time.monotonic() + SUBSCRIPTION_REFRESH_SECONDS
+                next_refresh = time.monotonic() + refresh_delay
 
         now = time.monotonic()
         if candidates and now >= next_probe:
             try:
                 working_ranking = benchmark(candidates)
                 choose_and_activate(working_ranking)
+                if not working_ranking and not active_proxy_is_running():
+                    next_refresh, next_probe = schedule_unavailable_retry()
+                    log(
+                        "no upstream proxy is available; retrying subscription refresh and "
+                        f"benchmark in {UNAVAILABLE_RETRY_SECONDS}s"
+                    )
+                    continue
                 next_healthcheck = time.monotonic() + HEALTHCHECK_INTERVAL_SECONDS
             except Exception as exc:
                 log(f"benchmark cycle failed: {exc}")
             finally:
-                next_probe = time.monotonic() + PROBE_INTERVAL_SECONDS
+                if next_probe <= time.monotonic():
+                    next_probe = time.monotonic() + PROBE_INTERVAL_SECONDS
 
         now = time.monotonic()
         if active_process is not None and active_process.poll() is not None:
@@ -711,8 +737,8 @@ def subscription_mode() -> int:
             failed_name = active_name or "active node"
             log(f"{failed_name} process exited with status {active_process.returncode}; trying next ranked node")
             if not failover_from_ranking(working_ranking, failed_url):
-                log("no ranked failover candidate succeeded; scheduling immediate benchmark")
-                next_probe = 0.0
+                log("no ranked failover candidate succeeded; scheduling unavailable retry")
+                next_refresh, next_probe = schedule_unavailable_retry()
             next_healthcheck = time.monotonic() + HEALTHCHECK_INTERVAL_SECONDS
 
         now = time.monotonic()
@@ -725,8 +751,8 @@ def subscription_mode() -> int:
             except Exception as exc:
                 log(f"active healthcheck FAIL          {failed_name}: {exc}")
                 if not failover_from_ranking(working_ranking, failed_url):
-                    log("no ranked failover candidate succeeded; scheduling immediate benchmark")
-                    next_probe = 0.0
+                    log("no ranked failover candidate succeeded; scheduling unavailable retry")
+                    next_refresh, next_probe = schedule_unavailable_retry()
             finally:
                 next_healthcheck = time.monotonic() + HEALTHCHECK_INTERVAL_SECONDS
 
@@ -742,6 +768,15 @@ def subscription_mode() -> int:
     return 0
 
 def main() -> int:
+    if sys.argv[1:] == ["--healthcheck"]:
+        try:
+            rtt = verify_active()
+            log(f"container healthcheck OK; RTT {rtt:.1f} ms")
+            return 0
+        except Exception as exc:
+            log(f"container healthcheck FAIL: {exc}")
+            return 1
+
     if bool(SUBSCRIPTION_URL) == bool(UPSTREAM_URL):
         log("set exactly one of SUBSCRIPTION_URL or UPSTREAM_URL")
         return 2
