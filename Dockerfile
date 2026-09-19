@@ -46,8 +46,9 @@ RUN apt-get update \
 COPY --from=builder /opt/sb2p /usr/local
 COPY --from=builder /usr/local/bin/sing-box /usr/local/bin/sing-box
 COPY docker-entrypoint.sh /usr/local/bin/docker-entrypoint.sh
+COPY supervisor.py /usr/local/bin/supervisor.py
 
-RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh \
+RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh /usr/local/bin/supervisor.py \
     && command -v sb2p \
     && command -v sing-box
 
