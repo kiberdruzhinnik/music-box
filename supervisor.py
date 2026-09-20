@@ -12,7 +12,6 @@ import re
 import signal
 import socket
 import subprocess
-import sys
 import tempfile
 import threading
 import time
@@ -794,15 +793,6 @@ def subscription_mode() -> int:
     return 0
 
 def main() -> int:
-    if sys.argv[1:] == ["--healthcheck"]:
-        try:
-            rtt = verify_active()
-            log(f"container healthcheck OK; RTT {rtt:.1f} ms")
-            return 0
-        except Exception as exc:
-            log(f"container healthcheck FAIL: {exc}")
-            return 1
-
     if bool(SUBSCRIPTION_URL) == bool(UPSTREAM_URL):
         log("set exactly one of SUBSCRIPTION_URL or UPSTREAM_URL")
         return 2

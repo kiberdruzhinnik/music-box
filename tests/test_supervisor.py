@@ -121,15 +121,6 @@ class SupervisorStateTest(unittest.TestCase):
         self.assertEqual(refresh_at, 137.0)
         self.assertEqual(probe_at, 137.0)
 
-    def test_healthcheck_mode_fails_when_active_proxy_probe_fails(self) -> None:
-        original_argv = supervisor.sys.argv
-        supervisor.sys.argv = ["supervisor.py", "--healthcheck"]
-        try:
-            with mock.patch.object(supervisor, "verify_active", side_effect=OSError("no upstream")):
-                self.assertEqual(supervisor.main(), 1)
-        finally:
-            supervisor.sys.argv = original_argv
-
     def test_subscription_refresh_uses_healthy_active_upstream_proxy(self) -> None:
         supervisor.active_process = FakeProcess()
         with mock.patch.object(supervisor, "verify_active", return_value=12.5):

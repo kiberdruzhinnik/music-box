@@ -76,10 +76,11 @@ ENV SB2P_INTERNAL_SOCKS_PORT=11080 \
     SB2P_INTERNAL_HTTP_PORT=18080 \
     PYTHONUNBUFFERED=1
 
-# The health check uses the same proxied HTTP 204 request as the supervisor.
-# It is unhealthy when no active listener exists or the selected upstream fails.
+# The health check only verifies that the supervisor process is running. Docker's
+# init shim may be PID 1, so find the supervisor in /proc. Upstream reachability
+# remains the supervisor's responsibility for selection and failover.
 HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=2 \
-    CMD ["python", "/usr/local/bin/supervisor.py", "--healthcheck"]
+    CMD ["sh", "-ec", "for task_cmdline in /proc/[0-9]*/cmdline; do [ -r \"$task_cmdline\" ] || continue; if tr '\\000' ' ' < \"$task_cmdline\" | grep -q '[s]upervisor.py'; then exit 0; fi; done; exit 1"]
 
 USER sb2p
 
