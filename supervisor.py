@@ -1,4 +1,7 @@
 #!/usr/bin/env python3
+# This process supervisor intentionally turns unexpected parser, subprocess,
+# and network failures into logged recovery paths instead of crashing.
+# ruff: noqa: BLE001
 from __future__ import annotations
 
 import base64
@@ -8,17 +11,16 @@ import os
 import re
 import signal
 import socket
-import statistics
-import tempfile
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 import urllib.error
 import urllib.parse
 import urllib.request
+from collections.abc import Iterable
 from dataclasses import dataclass
-from typing import Iterable
 
 SUPPORTED_SCHEMES = (
     "vless://", "vmess://", "trojan://", "hysteria2://", "hy2://",
@@ -211,6 +213,19 @@ def parse_subscription(body: bytes) -> list[str]:
     return unique
 
 
+def active_subscription_proxy() -> str | None:
+    """Return the local HTTP proxy only while its upstream is healthy."""
+    if not active_proxy_is_running():
+        return None
+    try:
+        rtt = verify_active()
+        log(f"active upstream is available for subscription refresh; RTT {rtt:.1f} ms")
+    except Exception as exc:
+        log(f"active upstream is unavailable for subscription refresh: {exc}")
+        return None
+    return f"http://127.0.0.1:{SB2P_INTERNAL_HTTP_PORT}"
+
+
 def fetch_subscription() -> list[str]:
     request = urllib.request.Request(
         SUBSCRIPTION_URL,
@@ -220,7 +235,18 @@ def fetch_subscription() -> list[str]:
             "Cache-Control": "no-cache",
         },
     )
-    with urllib.request.urlopen(request, timeout=PROBE_TIMEOUT_SECONDS + 5) as response:
+    proxy_url = active_subscription_proxy()
+    if proxy_url:
+        log("fetching subscription through the healthy active upstream proxy")
+        opener = urllib.request.build_opener(
+            urllib.request.ProxyHandler({"http": proxy_url, "https": proxy_url})
+        )
+    else:
+        log("no healthy active upstream proxy; fetching subscription directly")
+        # An empty ProxyHandler makes the direct fallback independent of any
+        # proxy-related environment variables inherited by the container.
+        opener = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+    with opener.open(request, timeout=PROBE_TIMEOUT_SECONDS + 5) as response:
         body = response.read()
     urls = parse_subscription(body)
     if not urls:
@@ -254,7 +280,7 @@ def candidate_name(url: str) -> str:
         if parsed.hostname:
             return parsed.hostname
     except Exception:
-        pass
+        return "unnamed"
     return "unnamed"
 
 

@@ -4,7 +4,7 @@ This image keeps `sing-box` baked into the Docker image and adds a Python superv
 
 ## Behaviour
 
-1. Periodically downloads `SUBSCRIPTION_URL`.
+1. Periodically downloads `SUBSCRIPTION_URL` through the healthy active upstream proxy. If no active upstream is healthy, it explicitly fetches the subscription directly.
 2. Parses plain share-link lists, Base64 share-link lists, or JSON containing share links.
 3. Filters nodes by `COUNTRY` or `COUNTRY_REGEX` using the node display name.
 4. Reverses matched subscription order by default.

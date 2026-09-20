@@ -65,6 +65,9 @@ RUN chmod 0755 /usr/local/bin/docker-entrypoint.sh /usr/local/bin/supervisor.py 
     && command -v sb2p \
     && command -v sing-box
 
+RUN addgroup --system sb2p \
+    && adduser --system --ingroup sb2p --no-create-home --disabled-login sb2p
+
 # Public container ports. sb2p itself stays on loopback-only private ports;
 # socat publishes these two listeners on all container interfaces.
 EXPOSE 1080 8080
@@ -77,5 +80,7 @@ ENV SB2P_INTERNAL_SOCKS_PORT=11080 \
 # It is unhealthy when no active listener exists or the selected upstream fails.
 HEALTHCHECK --interval=30s --timeout=15s --start-period=30s --retries=2 \
     CMD ["python", "/usr/local/bin/supervisor.py", "--healthcheck"]
+
+USER sb2p
 
 ENTRYPOINT ["/usr/local/bin/docker-entrypoint.sh"]

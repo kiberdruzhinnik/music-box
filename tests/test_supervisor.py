@@ -12,7 +12,7 @@ import unittest
 from unittest import mock
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1]))
-import supervisor  # noqa: E402
+import supervisor
 
 
 class FakeProcess:
@@ -129,6 +129,25 @@ class SupervisorStateTest(unittest.TestCase):
                 self.assertEqual(supervisor.main(), 1)
         finally:
             supervisor.sys.argv = original_argv
+
+    def test_subscription_refresh_uses_healthy_active_upstream_proxy(self) -> None:
+        supervisor.active_process = FakeProcess()
+        with mock.patch.object(supervisor, "verify_active", return_value=12.5):
+            self.assertEqual(
+                supervisor.active_subscription_proxy(),
+                f"http://127.0.0.1:{supervisor.SB2P_INTERNAL_HTTP_PORT}",
+            )
+
+    def test_subscription_refresh_falls_back_to_direct_when_active_upstream_is_unhealthy(self) -> None:
+        supervisor.active_process = FakeProcess()
+        with mock.patch.object(supervisor, "verify_active", side_effect=OSError("unavailable")):
+            self.assertIsNone(supervisor.active_subscription_proxy())
+
+    def test_subscription_refresh_uses_no_proxy_when_no_active_upstream_exists(self) -> None:
+        supervisor.active_process = None
+        with mock.patch.object(supervisor, "verify_active") as verify:
+            self.assertIsNone(supervisor.active_subscription_proxy())
+        verify.assert_not_called()
 
 
 if __name__ == "__main__":
