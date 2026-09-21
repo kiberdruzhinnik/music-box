@@ -101,16 +101,18 @@ sing-box implements its supported SIP003 plugins internally, so an external `v2r
 
 `HEALTHCHECK_INTERVAL_SECONDS` is independent of the full `PROBE_INTERVAL_SECONDS` benchmark. The health check sends the same configured HTTP GET through the currently active proxy only.
 
-If the active proxy fails or its process exits, the supervisor uses the most recent successful benchmark ranking and tries the next-lowest RTT candidate, skipping the failed active node. It walks the ranking until one activates successfully. If no previously ranked candidate can be activated, it schedules an immediate full benchmark.
+If the active proxy process exits, the supervisor immediately uses the most recent successful benchmark ranking and tries the next-lowest RTT candidate, skipping the failed active node. A running proxy must fail `HEALTHCHECK_FAILURE_THRESHOLD` consecutive checks before failover; failed checks are retried after `HEALTHCHECK_RETRY_DELAY_SECONDS`. This avoids switching nodes for a one-off network or TLS failure. It walks the ranking until one activates successfully. If no previously ranked candidate can be activated, it schedules an immediate full benchmark.
 
 Example:
 
 ```dotenv
 PROBE_INTERVAL_SECONDS=3600
 HEALTHCHECK_INTERVAL_SECONDS=30
+HEALTHCHECK_FAILURE_THRESHOLD=2
+HEALTHCHECK_RETRY_DELAY_SECONDS=2
 ```
 
-This benchmarks all matching subscription nodes once per hour, but checks the selected active node every 30 seconds and fails over without waiting for the next full benchmark.
+This benchmarks all matching subscription nodes once per hour, but checks the selected active node every 30 seconds. One failed check is retried after two seconds; a second consecutive failure triggers failover without waiting for the next full benchmark.
 
 ## No available upstreams
 

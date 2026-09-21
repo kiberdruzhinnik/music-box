@@ -68,6 +68,8 @@ REVERSE_MATCHES = env_bool("REVERSE_MATCHES", True)
 SUBSCRIPTION_REFRESH_SECONDS = env_int("SUBSCRIPTION_REFRESH_SECONDS", 3600, 10)
 PROBE_INTERVAL_SECONDS = env_int("PROBE_INTERVAL_SECONDS", 300, 10)
 HEALTHCHECK_INTERVAL_SECONDS = env_int("HEALTHCHECK_INTERVAL_SECONDS", 60, 5)
+HEALTHCHECK_FAILURE_THRESHOLD = env_int("HEALTHCHECK_FAILURE_THRESHOLD", 2, 1)
+HEALTHCHECK_RETRY_DELAY_SECONDS = env_int("HEALTHCHECK_RETRY_DELAY_SECONDS", 2, 1)
 PROBE_TIMEOUT_SECONDS = env_int("PROBE_TIMEOUT_SECONDS", 8, 1)
 PROBE_ATTEMPTS = env_int("PROBE_ATTEMPTS", 2, 1)
 PROBE_CONCURRENCY = env_int("PROBE_CONCURRENCY", 4, 1)
@@ -605,6 +607,14 @@ def schedule_unavailable_retry() -> tuple[float, float]:
     return retry_at, retry_at
 
 
+def schedule_healthcheck_failure(failures: int) -> tuple[int, float, bool]:
+    """Track a failed health check and decide whether to fail over."""
+    failures += 1
+    if failures < HEALTHCHECK_FAILURE_THRESHOLD:
+        return failures, time.monotonic() + HEALTHCHECK_RETRY_DELAY_SECONDS, False
+    return failures, time.monotonic() + HEALTHCHECK_INTERVAL_SECONDS, True
+
+
 def activate(candidate: Candidate) -> bool:
     global active_process, active_url, active_name, active_config_path
 
@@ -708,6 +718,7 @@ def subscription_mode() -> int:
     next_refresh = 0.0
     next_probe = 0.0
     next_healthcheck = 0.0
+    healthcheck_failures = 0
 
     while not stop_event.is_set():
         now = time.monotonic()
@@ -761,6 +772,7 @@ def subscription_mode() -> int:
             failed_url = active_url
             failed_name = active_name or "active node"
             log(f"{failed_name} process exited with status {active_process.returncode}; trying next ranked node")
+            healthcheck_failures = 0
             if not failover_from_ranking(working_ranking, failed_url):
                 log("no ranked failover candidate succeeded; scheduling unavailable retry")
                 next_refresh, next_probe = schedule_unavailable_retry()
@@ -773,13 +785,27 @@ def subscription_mode() -> int:
             try:
                 rtt = verify_active()
                 log(f"active healthcheck OK   {rtt:.1f} ms  {failed_name}")
-            except Exception as exc:
-                log(f"active healthcheck FAIL          {failed_name}: {exc}")
-                if not failover_from_ranking(working_ranking, failed_url):
-                    log("no ranked failover candidate succeeded; scheduling unavailable retry")
-                    next_refresh, next_probe = schedule_unavailable_retry()
-            finally:
+                healthcheck_failures = 0
                 next_healthcheck = time.monotonic() + HEALTHCHECK_INTERVAL_SECONDS
+            except Exception as exc:
+                healthcheck_failures, next_healthcheck, should_fail_over = schedule_healthcheck_failure(
+                    healthcheck_failures
+                )
+                if not should_fail_over:
+                    log(
+                        f"active healthcheck FAIL          {failed_name}: {exc}; "
+                        f"retrying in {HEALTHCHECK_RETRY_DELAY_SECONDS}s "
+                        f"({healthcheck_failures}/{HEALTHCHECK_FAILURE_THRESHOLD})"
+                    )
+                else:
+                    log(
+                        f"active healthcheck FAIL          {failed_name}: {exc}; "
+                        f"failure threshold ({healthcheck_failures}/{HEALTHCHECK_FAILURE_THRESHOLD}) reached"
+                    )
+                    healthcheck_failures = 0
+                    if not failover_from_ranking(working_ranking, failed_url):
+                        log("no ranked failover candidate succeeded; scheduling unavailable retry")
+                        next_refresh, next_probe = schedule_unavailable_retry()
 
         wake_times = [next_refresh]
         if candidates:

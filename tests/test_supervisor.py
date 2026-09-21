@@ -121,6 +121,25 @@ class SupervisorStateTest(unittest.TestCase):
         self.assertEqual(refresh_at, 137.0)
         self.assertEqual(probe_at, 137.0)
 
+    def test_healthcheck_failure_retries_before_failover(self) -> None:
+        original_threshold = supervisor.HEALTHCHECK_FAILURE_THRESHOLD
+        original_delay = supervisor.HEALTHCHECK_RETRY_DELAY_SECONDS
+        original_interval = supervisor.HEALTHCHECK_INTERVAL_SECONDS
+        supervisor.HEALTHCHECK_FAILURE_THRESHOLD = 2
+        supervisor.HEALTHCHECK_RETRY_DELAY_SECONDS = 2
+        supervisor.HEALTHCHECK_INTERVAL_SECONDS = 60
+        try:
+            with mock.patch.object(supervisor.time, "monotonic", return_value=100.0):
+                failures, retry_at, should_fail_over = supervisor.schedule_healthcheck_failure(0)
+                self.assertEqual((failures, retry_at, should_fail_over), (1, 102.0, False))
+
+                failures, next_check_at, should_fail_over = supervisor.schedule_healthcheck_failure(failures)
+                self.assertEqual((failures, next_check_at, should_fail_over), (2, 160.0, True))
+        finally:
+            supervisor.HEALTHCHECK_FAILURE_THRESHOLD = original_threshold
+            supervisor.HEALTHCHECK_RETRY_DELAY_SECONDS = original_delay
+            supervisor.HEALTHCHECK_INTERVAL_SECONDS = original_interval
+
     def test_subscription_refresh_uses_healthy_active_upstream_proxy(self) -> None:
         supervisor.active_process = FakeProcess()
         with mock.patch.object(supervisor, "verify_active", return_value=12.5):
