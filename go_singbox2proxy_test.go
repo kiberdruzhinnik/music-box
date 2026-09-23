@@ -1,6 +1,7 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"encoding/base64"
 	"encoding/json"
@@ -10,7 +11,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"os/exec"
 	"strings"
 	"testing"
 	"time"
@@ -20,7 +20,8 @@ import (
 func TestShareURLFamilies(t *testing.T) {
 	vmess := base64.RawURLEncoding.EncodeToString([]byte(`{"v":"2","ps":"VMess test","add":"example.com","port":"443","id":"e2fd90f0-9d1a-4492-b6b3-a03a9d1d6b50","aid":"0","net":"ws","host":"example.com","path":"/ws","tls":"tls"}`))
 	legacySS := base64.RawURLEncoding.EncodeToString([]byte("aes-128-gcm:secret@example.com:8388"))
-	key := base64.StdEncoding.EncodeToString(make([]byte, 32))
+	privateKey := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{1}, 32))
+	publicKey := base64.StdEncoding.EncodeToString(bytes.Repeat([]byte{2}, 32))
 	links := map[string]string{
 		"vless":    "vless://e2fd90f0-9d1a-4492-b6b3-a03a9d1d6b50@example.com:443?security=tls&type=ws&path=%2Fws#VLESS",
 		"vmess":    "vmess://" + vmess,
@@ -30,7 +31,7 @@ func TestShareURLFamilies(t *testing.T) {
 		"ss":       "ss://aes-128-gcm:secret@example.com:8388?plugin=v2ray-plugin%3Btls%3Bhost%3Dexample.com",
 		"ss-old":   "ss://" + legacySS,
 		"tuic":     "tuic://e2fd90f0-9d1a-4492-b6b3-a03a9d1d6b50:secret@example.com:443?congestion_control=bbr",
-		"wg":       fmt.Sprintf("wg://%s@example.com:51820?public_key=%s&local_address=172.16.0.2%%2F32", key, key),
+		"wg":       fmt.Sprintf("wg://%s@example.com:51820?public_key=%s&local_address=172.16.0.2%%2F32", privateKey, publicKey),
 		"ssh":      "ssh://user:secret@example.com:22",
 		"http":     "http://user:secret@example.com:8080",
 		"https":    "https://user:secret@example.com:443",
@@ -51,17 +52,79 @@ func TestShareURLFamilies(t *testing.T) {
 			if cfg["route"].(map[string]any)["final"] != "proxy" {
 				t.Fatal("missing proxy route")
 			}
-			if _, lookupErr := exec.LookPath("sing-box"); lookupErr == nil {
-				path := t.TempDir() + "/config.json"
-				if err = os.WriteFile(path, data, 0600); err != nil {
-					t.Fatal(err)
+			if os.Getenv("SINGBOX_INTEGRATION_TEST") == "1" {
+				ports := &portAllocator{used: make(map[int]bool)}
+				httpPort, reserveErr := ports.reserve()
+				if reserveErr != nil {
+					t.Fatal(reserveErr)
 				}
-				output, checkErr := exec.Command("sing-box", "check", "-c", path).CombinedOutput()
-				if checkErr != nil {
-					t.Fatalf("sing-box rejected %s config: %s", name, output)
+				socksPort, reserveErr := ports.reserve()
+				if reserveErr != nil {
+					t.Fatal(reserveErr)
+				}
+				process, launchErr := launchProxy(link, httpPort, socksPort)
+				if launchErr != nil {
+					t.Fatalf("start %s instance: %v", name, launchErr)
+				}
+				defer process.stop()
+				if waitErr := waitForPort(context.Background(), httpPort, process, 3*time.Second); waitErr != nil {
+					t.Fatalf("%s listener: %v", name, waitErr)
 				}
 			}
 		})
+	}
+}
+
+// TestInProcessProxyTraffic verifies that the linked sing-box instance passes
+// an HTTP probe through an upstream HTTP proxy and closes cleanly.
+func TestInProcessProxyTraffic(t *testing.T) {
+	upstream := httptest.NewServer(http.HandlerFunc(func(writer http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodConnect {
+			writer.WriteHeader(http.StatusMethodNotAllowed)
+			return
+		}
+		connection, buffered, err := writer.(http.Hijacker).Hijack()
+		if err != nil {
+			t.Errorf("hijack upstream connection: %v", err)
+			return
+		}
+		defer connection.Close()
+		_, _ = fmt.Fprint(buffered, "HTTP/1.1 200 Connection Established\r\n\r\n")
+		if err = buffered.Flush(); err != nil {
+			t.Errorf("send CONNECT response: %v", err)
+			return
+		}
+		if _, err = http.ReadRequest(buffered.Reader); err != nil {
+			t.Errorf("read tunneled request: %v", err)
+			return
+		}
+		_, _ = fmt.Fprint(buffered, "HTTP/1.1 204 No Content\r\nContent-Length: 0\r\n\r\n")
+		if err = buffered.Flush(); err != nil {
+			t.Errorf("send probe response: %v", err)
+		}
+	}))
+	defer upstream.Close()
+	ports := &portAllocator{used: make(map[int]bool)}
+	httpPort, err := ports.reserve()
+	if err != nil {
+		t.Fatal(err)
+	}
+	socksPort, err := ports.reserve()
+	if err != nil {
+		t.Fatal(err)
+	}
+	process, err := launchProxy(upstream.URL, httpPort, socksPort)
+	if err != nil {
+		t.Fatalf("start in-process proxy: %v", err)
+	}
+	defer process.stop()
+	_, err = httpProbe(context.Background(), config{testURL: "http://example.test/health", probeTimeout: 2 * time.Second}, httpPort)
+	if err != nil {
+		t.Fatalf("probe through in-process proxy: %v", err)
+	}
+	process.stop()
+	if process.alive() {
+		t.Fatal("proxy instance remained alive after stop")
 	}
 }
 

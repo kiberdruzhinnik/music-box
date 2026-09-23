@@ -75,19 +75,6 @@ COUNTRY_REGEX=(?i)(🇳🇱|Netherlands|\bNL\b)
 `TCP_TEST_URL`. The probe endpoint must return HTTP 204 through a working
 proxy.
 
-## TrueNAS and read-only containers
-
-Temporary sing-box configuration files are stored in `/dev/shm` by default.
-If `/tmp` or `/dev/shm` is unavailable, mount a writable ephemeral directory
-and set its path with `SB2P_TEMP_DIR`, for example:
-
-```dotenv
-SB2P_TEMP_DIR=/run/singbox2proxy-docker
-```
-
-The container runs as a non-root user, so the mounted directory must be
-writable by that user.
-
 ## Supported URLs
 
 VLESS, VMess, Trojan, Hysteria 1/2, Shadowsocks (including SIP002 plugin
@@ -104,6 +91,11 @@ go test ./...
 go vet ./...
 docker build -t local/singbox2proxy-docker:latest .
 ```
+
+sing-box is a pinned Go module dependency (`github.com/sagernet/sing-box`
+v1.14.1). The Docker build links it into the supervisor, so no separate
+sing-box executable or temporary config directory is required. Naive support
+uses the separately pinned Cronet shared library in the container image.
 
 Security checks are available through `security-scan.sh` and require Semgrep
 and Trivy:

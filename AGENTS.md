@@ -10,6 +10,7 @@ management, failover, and proxy forwarding. Go tests are kept beside the code
 (`*_test.go`). `Dockerfile`, `docker-compose.yml`, `.env.example`, and
 `security-scan.sh` define the container and local operations. Never commit
 `.env` or other credentials.
+`github.com/sagernet/sing-box` is a pinned dependency in `go.mod`.
 
 ## Build, Test, and Development Commands
 
@@ -54,5 +55,4 @@ subscription URLs.
 ## Security & Configuration
 
 Run Semgrep and Trivy through `security-scan.sh`. Review findings rather than
-silencing them. The non-root container may need a writable `SB2P_TEMP_DIR` on
-TrueNAS or other read-only runtimes.
+silencing them. Keep the image compatible with non-root, read-only runtimes.

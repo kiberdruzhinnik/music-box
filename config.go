@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// config holds the settings accepted by the Python supervisor.
+// config holds the settings accepted by this supervisor.
 type config struct {
 	subscriptionURL        string
 	upstreamURL            string
@@ -47,7 +47,7 @@ func envInt(name string, fallback, minimum int) (int, error) {
 	return value, nil
 }
 
-// envBool reads the same true and false spellings as the Python supervisor.
+// envBool reads the supported true and false spellings.
 func envBool(name string, fallback bool) (bool, error) {
 	raw, ok := os.LookupEnv(name)
 	if !ok {

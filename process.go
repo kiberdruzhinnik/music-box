@@ -1,127 +1,53 @@
 package main
 
 import (
-	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"net"
-	"os"
-	"os/exec"
 	"strconv"
 	"strings"
 	"sync"
-	"syscall"
 	"time"
+
+	box "github.com/sagernet/sing-box"
+	"github.com/sagernet/sing-box/include"
+	"github.com/sagernet/sing-box/option"
+	boxjson "github.com/sagernet/sing/common/json"
 )
 
-// boundedOutput retains a small amount of child output for redacted diagnostics.
-type boundedOutput struct {
-	mu   sync.Mutex
-	data []byte
-}
-
-// Write keeps the newest 8 KiB of child process output.
-func (buffer *boundedOutput) Write(data []byte) (int, error) {
-	buffer.mu.Lock()
-	defer buffer.mu.Unlock()
-	buffer.data = append(buffer.data, data...)
-	if len(buffer.data) > 8192 {
-		buffer.data = bytes.Clone(buffer.data[len(buffer.data)-8192:])
-	}
-	return len(data), nil
-}
-
-// String returns the captured output for diagnostic redaction.
-func (buffer *boundedOutput) String() string {
-	buffer.mu.Lock()
-	defer buffer.mu.Unlock()
-	return string(buffer.data)
-}
-
-// proxyProcess owns one sing-box child and its temporary config file.
+// proxyProcess owns one in-process sing-box instance.
 type proxyProcess struct {
-	cmd        *exec.Cmd
-	configPath string
-	output     *boundedOutput
-	done       chan struct{}
-	exitErr    error
+	instance *box.Box
+	cancel   context.CancelFunc
+	done     chan struct{}
+	stopOnce sync.Once
 }
 
-// launchProxy writes a private sing-box config and starts one child process.
+// launchProxy parses a generated configuration and starts a sing-box instance.
 func launchProxy(link string, httpPort, socksPort int) (*proxyProcess, error) {
 	configJSON, err := buildSingBoxConfig(link, httpPort, socksPort)
 	if err != nil {
 		return nil, err
 	}
-	path, err := writeTemporaryConfig(configJSON)
+	ctx, cancel := context.WithCancel(include.Context(context.Background()))
+	options, err := boxjson.UnmarshalExtendedContext[option.Options](ctx, configJSON)
 	if err != nil {
-		return nil, err
+		cancel()
+		return nil, fmt.Errorf("parse sing-box config: %w", err)
 	}
-	output := &boundedOutput{}
-	cmd := exec.Command("sing-box", "run", "-c", path)
-	cmd.Stdout = output
-	cmd.Stderr = output
-	if err = cmd.Start(); err != nil {
-		_ = os.Remove(path)
-		return nil, fmt.Errorf("start sing-box: %w", err)
+	instance, err := box.New(box.Options{Context: ctx, Options: options})
+	if err != nil {
+		cancel()
+		return nil, fmt.Errorf("create sing-box instance: %w", err)
 	}
-	process := &proxyProcess{cmd: cmd, configPath: path, output: output, done: make(chan struct{})}
-	go func() {
-		process.exitErr = cmd.Wait()
-		close(process.done)
-	}()
-	return process, nil
+	if err = instance.Start(); err != nil {
+		cancel()
+		return nil, fmt.Errorf("start sing-box instance: %w", err)
+	}
+	return &proxyProcess{instance: instance, cancel: cancel, done: make(chan struct{})}, nil
 }
 
-// writeTemporaryConfig stores a private sing-box configuration in a writable
-// runtime directory and returns its path. Container platforms may mount /tmp
-// read-only, so SB2P_TEMP_DIR and /dev/shm are tried before the conventional
-// temporary directories.
-func writeTemporaryConfig(configJSON []byte) (string, error) {
-	directories := []string{
-		strings.TrimSpace(os.Getenv("SB2P_TEMP_DIR")),
-		os.TempDir(),
-		"/dev/shm",
-		"/tmp",
-		"/var/tmp",
-	}
-	seen := make(map[string]struct{}, len(directories))
-	var lastErr error
-	for _, directory := range directories {
-		if directory == "" {
-			continue
-		}
-		if _, exists := seen[directory]; exists {
-			continue
-		}
-		seen[directory] = struct{}{}
-		file, err := os.CreateTemp(directory, "singbox2proxy-docker-*.json")
-		if err != nil {
-			lastErr = err
-			continue
-		}
-		path := file.Name()
-		if _, err = file.Write(configJSON); err != nil {
-			_ = file.Close()
-			_ = os.Remove(path)
-			lastErr = err
-			continue
-		}
-		if err = file.Close(); err != nil {
-			_ = os.Remove(path)
-			lastErr = err
-			continue
-		}
-		return path, nil
-	}
-	if lastErr == nil {
-		lastErr = errors.New("no writable temporary directory configured")
-	}
-	return "", fmt.Errorf("create temporary sing-box config: %w", lastErr)
-}
-
-// alive reports whether sing-box has not yet exited.
+// alive reports whether the sing-box instance has not been stopped.
 func (process *proxyProcess) alive() bool {
 	select {
 	case <-process.done:
@@ -131,36 +57,20 @@ func (process *proxyProcess) alive() bool {
 	}
 }
 
-// exitStatus returns the completed child status without exposing its config.
-func (process *proxyProcess) exitStatus() string {
-	if process.alive() {
-		return "running"
-	}
-	if process.exitErr == nil {
-		return "0"
-	}
-	var exit *exec.ExitError
-	if errors.As(process.exitErr, &exit) {
-		return strconv.Itoa(exit.ExitCode())
-	}
-	return "unknown"
-}
-
-// stop terminates sing-box and removes its temporary configuration.
+// stop closes the sing-box instance and its context once.
 func (process *proxyProcess) stop() {
 	if process == nil {
 		return
 	}
-	defer func() { _ = os.Remove(process.configPath) }()
-	if process.alive() {
-		_ = process.cmd.Process.Signal(syscall.SIGTERM)
-		select {
-		case <-process.done:
-		case <-time.After(3 * time.Second):
-			_ = process.cmd.Process.Kill()
-			<-process.done
+	process.stopOnce.Do(func() {
+		if process.instance != nil {
+			_ = process.instance.Close()
 		}
-	}
+		if process.cancel != nil {
+			process.cancel()
+		}
+		close(process.done)
+	})
 }
 
 // redactedOutput removes known share and subscription URLs before logging.
@@ -176,7 +86,7 @@ func redactedOutput(output, link, subscriptionURL string) string {
 	return output
 }
 
-// waitForPort waits until a child opens its local HTTP listener or exits.
+// waitForPort waits until an instance opens its local HTTP listener.
 func waitForPort(ctx context.Context, port int, process *proxyProcess, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
@@ -185,7 +95,7 @@ func waitForPort(ctx context.Context, port int, process *proxyProcess, timeout t
 			return err
 		}
 		if !process.alive() {
-			return fmt.Errorf("sing-box exited with status %s before its listener was ready", process.exitStatus())
+			return fmt.Errorf("sing-box instance stopped before its listener was ready")
 		}
 		connection, err := net.DialTimeout("tcp", address, 150*time.Millisecond)
 		if err == nil {

@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// supervisor owns the current sing-box child and subscription state.
+// supervisor owns the current sing-box instance and subscription state.
 type supervisor struct {
 	cfg            config
 	ports          *portAllocator
@@ -31,7 +31,7 @@ func newSupervisor(cfg config) *supervisor {
 	return &supervisor{cfg: cfg, ports: &portAllocator{used: make(map[int]bool)}}
 }
 
-// activeRunning reports whether the selected sing-box process remains alive.
+// activeRunning reports whether the selected sing-box instance remains active.
 func (supervisor *supervisor) activeRunning() bool {
 	return supervisor.active != nil && supervisor.active.alive()
 }
@@ -101,13 +101,12 @@ func (supervisor *supervisor) activate(ctx context.Context, candidate candidate)
 	supervisor.stopActive()
 	process, err := launchProxy(candidate.url, supervisor.cfg.internalHTTPPort, supervisor.cfg.internalSOCKSPort)
 	if err != nil {
-		logf("failed to activate %s: %s", candidate.name, err)
+		logf("failed to activate %s: %s", candidate.name, redactedOutput(err.Error(), candidate.url, supervisor.cfg.subscriptionURL))
 		return false
 	}
 	if err = waitForPort(ctx, supervisor.cfg.internalHTTPPort, process, 8*time.Second); err != nil {
-		detail := redactedOutput(process.output.String(), candidate.url, supervisor.cfg.subscriptionURL)
 		process.stop()
-		logf("failed to activate %s: %s; %s", candidate.name, err, detail)
+		logf("failed to activate %s: %s", candidate.name, err)
 		return false
 	}
 	supervisor.active = process
@@ -123,7 +122,7 @@ func (supervisor *supervisor) activate(ctx context.Context, candidate candidate)
 	return true
 }
 
-// stopActive terminates the selected sing-box child and clears its state.
+// stopActive closes the selected sing-box instance and clears its state.
 func (supervisor *supervisor) stopActive() {
 	if supervisor.active != nil {
 		supervisor.active.stop()
@@ -250,7 +249,7 @@ func (supervisor *supervisor) runSubscription(ctx context.Context) error {
 		}
 		if supervisor.active != nil && !supervisor.active.alive() {
 			failedURL := supervisor.activeURL
-			logf("%s process exited with status %s; trying next ranked node", supervisor.activeName, supervisor.active.exitStatus())
+			logf("%s instance stopped; trying next ranked node", supervisor.activeName)
 			supervisor.healthFailures = 0
 			if !supervisor.failoverFromRanking(ctx, failedURL) {
 				logf("no ranked failover candidate succeeded; scheduling unavailable retry")

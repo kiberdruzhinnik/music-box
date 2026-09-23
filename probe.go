@@ -64,16 +64,13 @@ func (supervisor *supervisor) probeCandidate(ctx context.Context, candidate cand
 	defer supervisor.ports.release(socksPort)
 	process, err := launchProxy(candidate.url, httpPort, socksPort)
 	if err != nil {
-		result.detail = err.Error()
+		result.detail = redactedOutput(err.Error(), candidate.url, supervisor.cfg.subscriptionURL)
 		return result
 	}
 	defer process.stop()
 	startupTimeout := min(5*time.Second, supervisor.cfg.probeTimeout)
 	if err = waitForPort(ctx, httpPort, process, startupTimeout); err != nil {
 		result.detail = err.Error()
-		if detail := redactedOutput(process.output.String(), candidate.url, supervisor.cfg.subscriptionURL); detail != "" {
-			result.detail += ": " + detail
-		}
 		return result
 	}
 	for attempt := 0; attempt < supervisor.cfg.probeAttempts; attempt++ {

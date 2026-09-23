@@ -10,7 +10,7 @@ import (
 	"time"
 )
 
-// forwarder publishes a stable TCP listener while sing-box children change.
+// forwarder publishes a stable TCP listener while sing-box instances change.
 type forwarder struct {
 	listener net.Listener
 	target   string
