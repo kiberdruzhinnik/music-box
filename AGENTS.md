@@ -2,47 +2,51 @@
 
 ## Project Structure & Module Organization
 
-This is a Go module (`singbox2proxy-docker`) with all production sources in
-the repository root. `main.go` starts the supervisor, while `config.go`,
-`subscription.go`, `links.go`, `probe.go`, `process.go`, `supervisor.go`, and
-`forwarder.go` contain configuration, URI parsing, probing, sing-box process
-management, failover, and proxy forwarding. Go tests are kept beside the code
-(`*_test.go`). `Dockerfile`, `docker-compose.yml`, `.env.example`, and
-`security-scan.sh` define the container and local operations. Never commit
-`.env` or other credentials.
-`github.com/sagernet/sing-box` is a pinned dependency in `go.mod`.
+This is one Go module (`singbox2proxy-docker`), with source and `*_test.go`
+files in the repository root. `main.go` starts the supervisor; `config.go`,
+`subscription.go`, and `links.go` load settings and nodes. `probe.go` tests
+nodes, `supervisor.go` handles selection and failover, `process.go` runs
+sing-box in-process, and `forwarder.go` keeps public HTTP/SOCKS listeners
+stable across node changes. The pinned `github.com/sagernet/sing-box` module
+is linked into the executable; there is no separate sing-box binary or
+temporary JSON config. `Dockerfile`, `docker-compose.yml`, `.env.example`,
+and `security-scan.sh` cover deployment and scanning.
 
 ## Build, Test, and Development Commands
 
 Run these commands from the repository root:
 
 ```sh
-go test ./...                  # run all unit and integration-style tests
-go vet ./...                   # inspect suspicious Go constructs
+gofmt -w *.go                 # format changed Go files
+go test ./...                 # run unit tests
+go vet ./...                  # inspect suspicious Go constructs
 docker build -t local/singbox2proxy-docker:latest .
-docker compose up -d --build   # run locally using .env
+docker compose up -d --build  # run locally using .env
 docker compose logs -f
 sh security-scan.sh local/singbox2proxy-docker:latest
 ```
 
-The Docker build embeds the pinned sing-box release and supports only
-`linux/amd64` and `linux/arm64`. Use `.env.example` as the configuration
-template; set exactly one of `SUBSCRIPTION_URL` and `UPSTREAM_URL`.
+The Docker build supports only `linux/amd64` and `linux/arm64`, runs tagged
+integration tests on the native architecture, and packages pinned Cronet in
+a non-root Debian 13 distroless image. Copy `.env.example` to `.env` and set
+exactly one of `SUBSCRIPTION_URL` and `UPSTREAM_URL`.
 
 ## Coding Style & Naming Conventions
 
-Use standard Go formatting (`gofmt`) with tabs and idiomatic mixed-case Go
-identifiers. Exported declarations require Go-style comments; document helper
-functions when their behavior is non-obvious. Keep URLs, credentials, and
-subscription contents out of logs and tests. Add configuration names in
-`UPPER_SNAKE_CASE` and keep defaults documented in `.env.example`.
+Use `gofmt` (tabs) and idiomatic mixed-case Go identifiers. Add a Go-style
+comment to every function, including unexported helpers. Keep URLs,
+credentials, and subscription contents out of logs and tests. Use
+`UPPER_SNAKE_CASE` for environment variables and document defaults in
+`.env.example`.
 
 ## Testing Guidelines
 
-Name tests `Test...` and place them in `*_test.go` beside the implementation.
-Cover parsing, configuration, process lifecycle, and failure/fallback paths.
-Run `go test ./...` and `go vet ./...` before submitting changes; rebuild the
-image when Dockerfile or runtime behavior changes.
+Name tests `Test...` in `*_test.go` beside the implementation. Cover parsing,
+configuration, in-process sing-box lifecycle, and failure/fallback paths.
+Run `go test ./...` and `go vet ./...` before submitting changes. Rebuild and
+test the image after runtime changes; verify a real SOCKS5 request through
+Compose and `.env` when changing proxy behavior. Docker healthchecks inspect
+the supervisor only; upstream health belongs to its own probes.
 
 ## Commit & Pull Request Guidelines
 
@@ -54,5 +58,8 @@ subscription URLs.
 
 ## Security & Configuration
 
-Run Semgrep and Trivy through `security-scan.sh`. Review findings rather than
-silencing them. Keep the image compatible with non-root, read-only runtimes.
+Run Semgrep and Trivy through `security-scan.sh`; review findings rather than
+silencing them. Never commit `.env` or credentials. Compose binds host ports
+to loopback by default; exposing the unauthenticated proxy to a LAN requires
+an explicit binding and firewall rules. Preserve non-root, read-only runtime
+compatibility.

@@ -43,7 +43,7 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
       go test ./...; \
     fi
 
-FROM gcr.io/distroless/cc-debian12:nonroot@sha256:9dac0a79194e45a7da0158a9c6da57b217585af0786db3845d1f0ec1a0dd182f
+FROM gcr.io/distroless/cc-debian13:nonroot@sha256:54df941ed0d06a1bd95ef5e0ce391fd8d9f94b64782dc9a60062727849ee3f97
 COPY --from=builder /out/singbox2proxy-docker /usr/local/bin/singbox2proxy-docker
 COPY --from=cronet /tmp/libcronet.so /usr/local/bin/libcronet.so
 ENV PATH=/usr/local/bin
