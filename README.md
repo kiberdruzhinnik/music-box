@@ -21,6 +21,26 @@ The host ports are configured by `SOCKS5_PORT` and `HTTP_PORT` (10800 and
 10801 in the example). Inside the container, the HTTP and SOCKS5 services are
 available on ports 8080 and 1080.
 
+By default, Compose publishes the host ports on `127.0.0.1`, so only programs
+running on the Docker host can connect. To use the proxy from another device,
+set `BIND_ADDRESS` in `.env` to the host's LAN IP (or `0.0.0.0`) and restart
+with `docker compose up -d`. The proxy has no client authentication: restrict
+these ports to trusted clients with a firewall, and never expose them to the
+public Internet. In TrueNAS Apps, configure the app's port publishing in the
+TrueNAS UI; `BIND_ADDRESS` only controls this repository's Compose file.
+
+After a log line beginning `ACTIVE`, verify the host-side SOCKS5 port with:
+
+```sh
+curl --proxy socks5h://127.0.0.1:10800 \
+  https://www.gstatic.com/generate_204 -o /dev/null -w '%{http_code}\n'
+```
+
+A working proxy prints `204`. Before an upstream is activated, the container
+may be running and its port may accept TCP connections, but proxy requests
+will fail; check `docker compose logs` for `ACTIVE` and the `alive=X/Y` retest
+summary. Use the published host port, not the container's internal port 1080.
+
 ## How it works
 
 In subscription mode, the supervisor:
