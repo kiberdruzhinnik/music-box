@@ -90,6 +90,7 @@ active-node health-check or failover path when that logic changes.
 ## Change style
 
 - Use the standard library and retain Python type annotations and dataclasses.
+- Add a concise docstring to every Python function and method, including test helpers.
 - Prefer narrow, explicit error messages. A failed subscription refresh or probe
   should keep a working active node alive whenever possible.
 - Make subprocess lifecycle changes carefully: terminate children, remove any

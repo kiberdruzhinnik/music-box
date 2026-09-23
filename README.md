@@ -11,6 +11,7 @@ This image keeps `sing-box` baked into the Docker image and adds a Python superv
 5. Periodically launches temporary `sb2p` instances for candidate nodes.
 6. For each candidate, performs HTTP GET through its HTTP proxy to `https://www.gstatic.com/generate_204`.
 7. Only HTTP 204 counts as working; the candidate's score is its lowest measured RTT.
+   After each benchmark, the log reports `filtered=Y, alive=X/Y`, where `Y` is the number of nodes tested after filtering and `X` is the number that passed.
 8. Selects the lowest-RTT working node and runs it on the stable internal ports.
 9. Existing Docker SOCKS5/HTTP ports remain unchanged via the `socat` forwarding layer.
 10. If the active process exits, an immediate benchmark/failover is scheduled.
