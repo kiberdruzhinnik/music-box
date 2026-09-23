@@ -4,7 +4,7 @@ A Go implementation of the sibling Python subscription supervisor. It talks dire
 
 ## Run
 
-Use the parent directory's `.env` file (the Compose file references it). To run alongside the Python container, override the **host** ports so they do not collide:
+Use the repository's `.env` file (the Compose file references it). To run alongside the old Python image, override the **host** ports so they do not collide:
 
 ```sh
 SOCKS5_PORT=20800 HTTP_PORT=20801 docker compose up -d --build
@@ -33,6 +33,6 @@ The Docker build runs the Go tests. On native builds, it also checks generated s
 
 ## Security scans
 
-Run `sh security-scan.sh` after building the image. The script requires Semgrep and Trivy on `PATH`, scans this subfolder (never the parent `.env`) with Semgrep's default, security-audit, and OWASP Top Ten rulesets, then runs Trivy vulnerability, misconfiguration, and secret scans on both the source tree and image. Findings cause a nonzero exit. Pass an image name as the first argument to scan a different tag.
+Run `sh security-scan.sh` after building the image. The script requires Semgrep and Trivy on `PATH`, scans this project (never `.env`) with Semgrep's default, security-audit, and OWASP Top Ten rulesets, then runs Trivy vulnerability, misconfiguration, and secret scans on both the source tree and image. Findings cause a nonzero exit. Pass an image name as the first argument to scan a different tag.
 
 The current pinned sing-box 1.14.1 release still embeds dependencies with upstream Trivy advisories. The script reports these rather than suppressing them; upgrading to an untested pre-release or ignoring findings would not be a safe fix.

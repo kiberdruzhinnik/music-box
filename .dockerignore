@@ -1,5 +1,6 @@
 .env
 .git
 .DS_Store
-__pycache__/
-tests/
+*.test
+.ruff_cache/
+.mypy_cache/
