@@ -54,19 +54,9 @@ func launchProxy(link string, httpPort, socksPort int) (*proxyProcess, error) {
 	if err != nil {
 		return nil, err
 	}
-	file, err := os.CreateTemp("", "go-singbox2proxy-*.json")
+	path, err := writeTemporaryConfig(configJSON)
 	if err != nil {
-		return nil, fmt.Errorf("create temporary sing-box config: %w", err)
-	}
-	path := file.Name()
-	if _, err = file.Write(configJSON); err != nil {
-		_ = file.Close()
-		_ = os.Remove(path)
-		return nil, fmt.Errorf("write temporary sing-box config: %w", err)
-	}
-	if err = file.Close(); err != nil {
-		_ = os.Remove(path)
-		return nil, fmt.Errorf("close temporary sing-box config: %w", err)
+		return nil, err
 	}
 	output := &boundedOutput{}
 	cmd := exec.Command("sing-box", "run", "-c", path)
@@ -82,6 +72,53 @@ func launchProxy(link string, httpPort, socksPort int) (*proxyProcess, error) {
 		close(process.done)
 	}()
 	return process, nil
+}
+
+// writeTemporaryConfig stores a private sing-box configuration in a writable
+// runtime directory and returns its path. Container platforms may mount /tmp
+// read-only, so SB2P_TEMP_DIR and /dev/shm are tried before the conventional
+// temporary directories.
+func writeTemporaryConfig(configJSON []byte) (string, error) {
+	directories := []string{
+		strings.TrimSpace(os.Getenv("SB2P_TEMP_DIR")),
+		os.TempDir(),
+		"/dev/shm",
+		"/tmp",
+		"/var/tmp",
+	}
+	seen := make(map[string]struct{}, len(directories))
+	var lastErr error
+	for _, directory := range directories {
+		if directory == "" {
+			continue
+		}
+		if _, exists := seen[directory]; exists {
+			continue
+		}
+		seen[directory] = struct{}{}
+		file, err := os.CreateTemp(directory, "go-singbox2proxy-*.json")
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		path := file.Name()
+		if _, err = file.Write(configJSON); err != nil {
+			_ = file.Close()
+			_ = os.Remove(path)
+			lastErr = err
+			continue
+		}
+		if err = file.Close(); err != nil {
+			_ = os.Remove(path)
+			lastErr = err
+			continue
+		}
+		return path, nil
+	}
+	if lastErr == nil {
+		lastErr = errors.New("no writable temporary directory configured")
+	}
+	return "", fmt.Errorf("create temporary sing-box config: %w", lastErr)
 }
 
 // alive reports whether sing-box has not yet exited.

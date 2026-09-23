@@ -37,7 +37,7 @@ COPY --from=builder /out/go-singbox2proxy /usr/local/bin/go-singbox2proxy
 COPY --from=builder /out/sing-box /usr/local/bin/sing-box
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --chmod=1777 --from=builder /out/tmp /tmp
-ENV PATH=/usr/local/bin TMPDIR=/tmp
+ENV PATH=/usr/local/bin TMPDIR=/dev/shm
 USER 65532:65532
 EXPOSE 1080 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=2 \
