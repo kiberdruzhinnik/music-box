@@ -25,7 +25,7 @@ RUN set -eux; \
 COPY go.mod ./
 COPY *.go ./
 RUN CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" GOARM="${TARGETVARIANT#v}" \
-    go build -trimpath -ldflags='-s -w' -o /out/go-singbox2proxy .
+    go build -trimpath -ldflags='-s -w' -o /out/singbox2proxy-docker .
 RUN if [ "$TARGETARCH" = "$BUILDARCH" ]; then \
       PATH="/out:${PATH}" go test ./...; \
     else \
@@ -33,7 +33,7 @@ RUN if [ "$TARGETARCH" = "$BUILDARCH" ]; then \
     fi
 
 FROM scratch
-COPY --from=builder /out/go-singbox2proxy /usr/local/bin/go-singbox2proxy
+COPY --from=builder /out/singbox2proxy-docker /usr/local/bin/singbox2proxy-docker
 COPY --from=builder /out/sing-box /usr/local/bin/sing-box
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/ca-certificates.crt
 COPY --chmod=1777 --from=builder /out/tmp /tmp
@@ -41,5 +41,5 @@ ENV PATH=/usr/local/bin TMPDIR=/dev/shm
 USER 65532:65532
 EXPOSE 1080 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=2 \
-    CMD ["/usr/local/bin/go-singbox2proxy", "--healthcheck"]
-ENTRYPOINT ["/usr/local/bin/go-singbox2proxy"]
+    CMD ["/usr/local/bin/singbox2proxy-docker", "--healthcheck"]
+ENTRYPOINT ["/usr/local/bin/singbox2proxy-docker"]

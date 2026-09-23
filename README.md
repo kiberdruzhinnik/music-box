@@ -1,6 +1,6 @@
-# go-singbox2proxy
+# singbox2proxy-docker
 
-`go-singbox2proxy` runs a local HTTP and SOCKS5 proxy backed by `sing-box`.
+`singbox2proxy-docker` runs a local HTTP and SOCKS5 proxy backed by `sing-box`.
 It can use one configured upstream URL or select the fastest working node from
 a subscription.
 
@@ -82,7 +82,7 @@ If `/tmp` or `/dev/shm` is unavailable, mount a writable ephemeral directory
 and set its path with `SB2P_TEMP_DIR`, for example:
 
 ```dotenv
-SB2P_TEMP_DIR=/run/go-singbox2proxy
+SB2P_TEMP_DIR=/run/singbox2proxy-docker
 ```
 
 The container runs as a non-root user, so the mounted directory must be
@@ -102,12 +102,12 @@ The image supports `linux/amd64` and `linux/arm64` only.
 ```sh
 go test ./...
 go vet ./...
-docker build -t local/go-singbox2proxy:latest .
+docker build -t local/singbox2proxy-docker:latest .
 ```
 
 Security checks are available through `security-scan.sh` and require Semgrep
 and Trivy:
 
 ```sh
-sh security-scan.sh local/go-singbox2proxy:latest
+sh security-scan.sh local/singbox2proxy-docker:latest
 ```

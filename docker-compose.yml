@@ -2,8 +2,8 @@ services:
   go-sb2p:
     build:
       context: .
-    image: local/go-singbox2proxy:1.0.0
-    container_name: go-singbox2proxy
+    image: local/singbox2proxy-docker:1.0.0
+    container_name: singbox2proxy-docker
     restart: unless-stopped
     init: true
     env_file:

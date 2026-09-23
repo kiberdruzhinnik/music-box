@@ -11,7 +11,7 @@ for scanner in semgrep trivy; do
     fi
 done
 
-image=${1:-local/go-singbox2proxy:1.0.0}
+image=${1:-local/singbox2proxy-docker:1.0.0}
 
 semgrep scan --metrics=off --error \
     --config p/default \

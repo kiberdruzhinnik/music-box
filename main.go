@@ -33,7 +33,7 @@ func supervisorAlive() bool {
 			continue
 		}
 		arguments := strings.Split(string(commandLine), "\x00")
-		if len(arguments) == 0 || !strings.HasSuffix(arguments[0], "/go-singbox2proxy") {
+		if len(arguments) == 0 || !strings.HasSuffix(arguments[0], "/singbox2proxy-docker") {
 			continue
 		}
 		if len(arguments) > 1 && arguments[1] == "--healthcheck" {
@@ -80,7 +80,7 @@ func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 	if err := run(ctx); err != nil {
-		_, _ = fmt.Fprintf(os.Stderr, "go-singbox2proxy: %v\n", err)
+		_, _ = fmt.Fprintf(os.Stderr, "singbox2proxy-docker: %v\n", err)
 		os.Exit(1)
 	}
 }

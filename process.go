@@ -96,7 +96,7 @@ func writeTemporaryConfig(configJSON []byte) (string, error) {
 			continue
 		}
 		seen[directory] = struct{}{}
-		file, err := os.CreateTemp(directory, "go-singbox2proxy-*.json")
+		file, err := os.CreateTemp(directory, "singbox2proxy-docker-*.json")
 		if err != nil {
 			lastErr = err
 			continue
