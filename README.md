@@ -19,6 +19,12 @@ In subscription mode it downloads plain, Base64, or JSON share-link lists; filte
 
 The Docker image builds only for `linux/amd64` and `linux/arm64`. Other target architectures fail at build time.
 
+On TrueNAS Apps or another platform that mounts `/tmp` read-only, the image
+uses `/dev/shm` for short-lived sing-box configurations. If that runtime also
+does not provide a writable `/dev/shm`, mount a writable ephemeral dataset and
+set `SB2P_TEMP_DIR` to its container path. The supervisor tries that override,
+the configured `TMPDIR`, `/dev/shm`, `/tmp`, and `/var/tmp` in that order.
+
 Supported share URLs: VLESS, VMess, Trojan, Hysteria 1/2, Shadowsocks (including SIP002 plugin options), TUIC, WireGuard, SSH, HTTP/HTTPS, SOCKS 4/5, and Naive HTTPS. The image uses sing-box's static musl release, which includes Naive/Cronet support on both supported architectures. WireGuard URLs generate sing-box 1.14 endpoints, not the removed outbound form. As in the Python version, Clash/Mihomo YAML proxy objects are not accepted; use a subscription endpoint that emits share URLs.
 
 ## Verify
