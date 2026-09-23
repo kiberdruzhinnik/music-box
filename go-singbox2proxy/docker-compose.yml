@@ -1,18 +1,13 @@
 services:
-  sb2p:
+  go-sb2p:
     build:
       context: .
-      args:
-        SING_BOX_VERSION: "${SING_BOX_VERSION:-1.14.1}"
-        SB2P_VERSION: "${SB2P_VERSION:-0.3.4}"
-    image: local/singbox2proxy-supervisor:latest
-    container_name: singbox2proxy
+    image: local/go-singbox2proxy:1.0.0
+    container_name: go-singbox2proxy
     restart: unless-stopped
     init: true
-
     env_file:
-      - .env
-
+      - ../.env
     ports:
       - "${BIND_ADDRESS:-127.0.0.1}:${SOCKS5_PORT:-1080}:1080/tcp"
       - "${BIND_ADDRESS:-127.0.0.1}:${HTTP_PORT:-8080}:8080/tcp"

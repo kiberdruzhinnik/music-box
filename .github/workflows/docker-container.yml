@@ -55,8 +55,8 @@ jobs:
       - name: Build and push Docker image
         uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7
         with:
-          context: .
-          file: Dockerfile
+          context: go-singbox2proxy
+          file: go-singbox2proxy/Dockerfile
           push: true
           tags: |
             ghcr.io/${{ github.repository }}:${{ steps.semver.outputs.version }}
