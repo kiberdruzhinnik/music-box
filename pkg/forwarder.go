@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"context"
@@ -10,25 +10,25 @@ import (
 	"time"
 )
 
-// forwarder publishes a stable TCP listener while sing-box instances change.
-type forwarder struct {
+// Forwarder publishes a stable TCP listener while sing-box instances change.
+type Forwarder struct {
 	listener net.Listener
 	target   string
 }
 
-// startForwarder binds a public listener and forwards each connection internally.
-func startForwarder(ctx context.Context, publicPort, privatePort int) (*forwarder, error) {
+// StartForwarder binds a public listener and forwards each connection internally.
+func StartForwarder(ctx context.Context, publicPort, privatePort int) (*Forwarder, error) {
 	listener, err := net.Listen("tcp", net.JoinHostPort("0.0.0.0", strconv.Itoa(publicPort)))
 	if err != nil {
 		return nil, fmt.Errorf("listen on port %d: %w", publicPort, err)
 	}
-	forwarder := &forwarder{listener: listener, target: net.JoinHostPort("127.0.0.1", strconv.Itoa(privatePort))}
+	forwarder := &Forwarder{listener: listener, target: net.JoinHostPort("127.0.0.1", strconv.Itoa(privatePort))}
 	go forwarder.serve(ctx)
 	return forwarder, nil
 }
 
 // serve accepts connections until cancellation or listener closure.
-func (forwarder *forwarder) serve(ctx context.Context) {
+func (forwarder *Forwarder) serve(ctx context.Context) {
 	for {
 		connection, err := forwarder.listener.Accept()
 		if err != nil {
@@ -42,7 +42,7 @@ func (forwarder *forwarder) serve(ctx context.Context) {
 }
 
 // pipe copies a client connection bidirectionally to the active sing-box port.
-func (forwarder *forwarder) pipe(client net.Conn) {
+func (forwarder *Forwarder) pipe(client net.Conn) {
 	defer client.Close()
 	upstream, err := net.DialTimeout("tcp", forwarder.target, 2*time.Second)
 	if err != nil {
@@ -68,7 +68,7 @@ func (forwarder *forwarder) pipe(client net.Conn) {
 	copies.Wait()
 }
 
-// close stops accepting new public connections.
-func (forwarder *forwarder) close() error {
+// Close stops accepting new public connections.
+func (forwarder *Forwarder) Close() error {
 	return forwarder.listener.Close()
 }

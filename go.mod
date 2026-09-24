@@ -1,4 +1,4 @@
-module singbox2proxy-docker
+module github.com/kiberdruzhinnik/music-box
 
 go 1.26.0
 

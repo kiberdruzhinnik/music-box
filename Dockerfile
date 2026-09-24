@@ -27,13 +27,15 @@ RUN set -eux; \
     esac; \
     mkdir -p /out
 COPY go.mod go.sum ./
-COPY *.go ./
+COPY cmd ./cmd
+COPY pkg ./pkg
+COPY test ./test
 ARG SING_BOX_TAGS=with_gvisor,with_quic,with_dhcp,with_wireguard,with_utls,with_acme,with_clash_api,with_tailscale,with_ccm,with_ocm,with_cloudflared,with_naive_outbound,with_usbip,with_openvpn,with_openconnect,badlinkname,tfogo_checklinkname0,with_purego
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     CGO_ENABLED=0 GOOS="$TARGETOS" GOARCH="$TARGETARCH" \
     go build -trimpath -tags "$SING_BOX_TAGS" \
       -ldflags='-s -w -buildid= -X github.com/sagernet/sing-box/constant.Version=1.14.1' \
-      -o /out/singbox2proxy-docker .
+      -o /out/music-box ./cmd/music-box
 COPY --from=cronet /tmp/libcronet.so /out/libcronet.so
 RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache/go-build \
     if [ "$TARGETARCH" = "$BUILDARCH" ]; then \
@@ -44,11 +46,11 @@ RUN --mount=type=cache,target=/go/pkg/mod --mount=type=cache,target=/root/.cache
     fi
 
 FROM gcr.io/distroless/cc-debian13:nonroot@sha256:54df941ed0d06a1bd95ef5e0ce391fd8d9f94b64782dc9a60062727849ee3f97
-COPY --from=builder /out/singbox2proxy-docker /usr/local/bin/singbox2proxy-docker
+COPY --from=builder /out/music-box /usr/local/bin/music-box
 COPY --from=cronet /tmp/libcronet.so /usr/local/bin/libcronet.so
 ENV PATH=/usr/local/bin
 USER 65532:65532
 EXPOSE 1080 8080
 HEALTHCHECK --interval=30s --timeout=5s --start-period=30s --retries=2 \
-    CMD ["/usr/local/bin/singbox2proxy-docker", "--healthcheck"]
-ENTRYPOINT ["/usr/local/bin/singbox2proxy-docker"]
+    CMD ["/usr/local/bin/music-box", "--healthcheck"]
+ENTRYPOINT ["/usr/local/bin/music-box"]

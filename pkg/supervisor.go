@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"context"
@@ -14,7 +14,7 @@ import (
 type supervisor struct {
 	cfg            config
 	ports          *portAllocator
-	active         *proxyProcess
+	active         *ProxyProcess
 	activeURL      string
 	activeName     string
 	candidates     []candidate
@@ -33,7 +33,7 @@ func newSupervisor(cfg config) *supervisor {
 
 // activeRunning reports whether the selected sing-box instance remains active.
 func (supervisor *supervisor) activeRunning() bool {
-	return supervisor.active != nil && supervisor.active.alive()
+	return supervisor.active != nil && supervisor.active.Alive()
 }
 
 // verifyActive measures the selected node through its internal HTTP listener.
@@ -82,7 +82,7 @@ func (supervisor *supervisor) fetchSubscription(ctx context.Context) ([]string, 
 	if len(body) > 32*1024*1024 {
 		return nil, fmt.Errorf("subscription response exceeds 32 MiB")
 	}
-	links := parseSubscription(body)
+	links := ParseSubscription(body)
 	if len(links) == 0 {
 		return nil, fmt.Errorf("subscription contained no supported share URLs; expected plain, Base64, or JSON share URLs")
 	}
@@ -99,13 +99,13 @@ func (supervisor *supervisor) activate(ctx context.Context, candidate candidate)
 		logf("active node %s failed live probe; restarting", candidate.name)
 	}
 	supervisor.stopActive()
-	process, err := launchProxy(candidate.url, supervisor.cfg.internalHTTPPort, supervisor.cfg.internalSOCKSPort)
+	process, err := LaunchProxy(candidate.url, supervisor.cfg.internalHTTPPort, supervisor.cfg.internalSOCKSPort)
 	if err != nil {
 		logf("failed to activate %s: %s", candidate.name, redactedOutput(err.Error(), candidate.url, supervisor.cfg.subscriptionURL))
 		return false
 	}
-	if err = waitForPort(ctx, supervisor.cfg.internalHTTPPort, process, 8*time.Second); err != nil {
-		process.stop()
+	if err = WaitForPort(ctx, supervisor.cfg.internalHTTPPort, process, 8*time.Second); err != nil {
+		process.Stop()
 		logf("failed to activate %s: %s", candidate.name, err)
 		return false
 	}
@@ -125,7 +125,7 @@ func (supervisor *supervisor) activate(ctx context.Context, candidate candidate)
 // stopActive closes the selected sing-box instance and clears its state.
 func (supervisor *supervisor) stopActive() {
 	if supervisor.active != nil {
-		supervisor.active.stop()
+		supervisor.active.Stop()
 	}
 	supervisor.active = nil
 	supervisor.activeURL = ""
@@ -247,7 +247,7 @@ func (supervisor *supervisor) runSubscription(ctx context.Context) error {
 			supervisor.nextProbe = time.Now().Add(supervisor.cfg.probeInterval)
 			supervisor.nextHealth = time.Now().Add(supervisor.cfg.healthcheckInterval)
 		}
-		if supervisor.active != nil && !supervisor.active.alive() {
+		if supervisor.active != nil && !supervisor.active.Alive() {
 			failedURL := supervisor.activeURL
 			logf("%s instance stopped; trying next ranked node", supervisor.activeName)
 			supervisor.healthFailures = 0

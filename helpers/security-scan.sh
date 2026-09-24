@@ -1,7 +1,7 @@
 #!/bin/sh
 set -eu
 
-scan_dir=$(CDPATH= cd "$(dirname "$0")" && pwd)
+scan_dir=$(CDPATH= cd "$(dirname "$0")/.." && pwd)
 cd "$scan_dir"
 
 for scanner in semgrep trivy; do
@@ -11,7 +11,7 @@ for scanner in semgrep trivy; do
     fi
 done
 
-image=${1:-local/singbox2proxy-docker:1.0.0}
+image=${1:-local/music-box:1.0.0}
 
 semgrep scan --metrics=off --error \
     --config p/default \

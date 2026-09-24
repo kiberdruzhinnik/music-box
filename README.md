@@ -1,8 +1,11 @@
-# singbox2proxy-docker
+# music-box
 
-`singbox2proxy-docker` runs a local HTTP and SOCKS5 proxy backed by `sing-box`.
+`music-box` runs a local HTTP and SOCKS5 proxy backed by `sing-box`.
 It can use one configured upstream URL or select the fastest working node from
 a subscription.
+
+The executable lives in `cmd/music-box/`, reusable supervisor code
+in `pkg/`, black-box tests in `test/`, and maintenance scripts in `helpers/`.
 
 ## Quick start
 
@@ -109,7 +112,7 @@ The image supports `linux/amd64` and `linux/arm64` only.
 ```sh
 go test ./...
 go vet ./...
-docker build -t local/singbox2proxy-docker:latest .
+docker build -t local/music-box:latest .
 ```
 
 sing-box is a pinned Go module dependency (`github.com/sagernet/sing-box`
@@ -117,9 +120,9 @@ v1.14.1). The Docker build links it into the supervisor, so no separate
 sing-box executable or temporary config directory is required. Naive support
 uses the separately pinned Cronet shared library in the container image.
 
-Security checks are available through `security-scan.sh` and require Semgrep
+Security checks are available through `helpers/security-scan.sh` and require Semgrep
 and Trivy:
 
 ```sh
-sh security-scan.sh local/singbox2proxy-docker:latest
+sh helpers/security-scan.sh local/music-box:latest
 ```

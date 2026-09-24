@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"encoding/json"
@@ -465,8 +465,8 @@ func parseProxyLink(raw string) (linkConfig, error) {
 	return linkConfig{outbound: base}, nil
 }
 
-// buildSingBoxConfig wraps a parsed share URL in loopback HTTP and SOCKS listeners.
-func buildSingBoxConfig(raw string, httpPort, socksPort int) ([]byte, error) {
+// BuildSingBoxConfig wraps a parsed share URL in loopback HTTP and SOCKS listeners.
+func BuildSingBoxConfig(raw string, httpPort, socksPort int) ([]byte, error) {
 	target, err := parseProxyLink(raw)
 	if err != nil {
 		return nil, err

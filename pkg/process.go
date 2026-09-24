@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"context"
@@ -15,17 +15,17 @@ import (
 	boxjson "github.com/sagernet/sing/common/json"
 )
 
-// proxyProcess owns one in-process sing-box instance.
-type proxyProcess struct {
+// ProxyProcess owns one in-process sing-box instance.
+type ProxyProcess struct {
 	instance *box.Box
 	cancel   context.CancelFunc
 	done     chan struct{}
 	stopOnce sync.Once
 }
 
-// launchProxy parses a generated configuration and starts a sing-box instance.
-func launchProxy(link string, httpPort, socksPort int) (*proxyProcess, error) {
-	configJSON, err := buildSingBoxConfig(link, httpPort, socksPort)
+// LaunchProxy parses a generated configuration and starts a sing-box instance.
+func LaunchProxy(link string, httpPort, socksPort int) (*ProxyProcess, error) {
+	configJSON, err := BuildSingBoxConfig(link, httpPort, socksPort)
 	if err != nil {
 		return nil, err
 	}
@@ -44,11 +44,11 @@ func launchProxy(link string, httpPort, socksPort int) (*proxyProcess, error) {
 		cancel()
 		return nil, fmt.Errorf("start sing-box instance: %w", err)
 	}
-	return &proxyProcess{instance: instance, cancel: cancel, done: make(chan struct{})}, nil
+	return &ProxyProcess{instance: instance, cancel: cancel, done: make(chan struct{})}, nil
 }
 
-// alive reports whether the sing-box instance has not been stopped.
-func (process *proxyProcess) alive() bool {
+// Alive reports whether the sing-box instance has not been stopped.
+func (process *ProxyProcess) Alive() bool {
 	select {
 	case <-process.done:
 		return false
@@ -57,8 +57,8 @@ func (process *proxyProcess) alive() bool {
 	}
 }
 
-// stop closes the sing-box instance and its context once.
-func (process *proxyProcess) stop() {
+// Stop closes the sing-box instance and its context once.
+func (process *ProxyProcess) Stop() {
 	if process == nil {
 		return
 	}
@@ -86,15 +86,15 @@ func redactedOutput(output, link, subscriptionURL string) string {
 	return output
 }
 
-// waitForPort waits until an instance opens its local HTTP listener.
-func waitForPort(ctx context.Context, port int, process *proxyProcess, timeout time.Duration) error {
+// WaitForPort waits until an instance opens its local HTTP listener.
+func WaitForPort(ctx context.Context, port int, process *ProxyProcess, timeout time.Duration) error {
 	deadline := time.Now().Add(timeout)
 	address := net.JoinHostPort("127.0.0.1", strconv.Itoa(port))
 	for time.Now().Before(deadline) {
 		if err := ctx.Err(); err != nil {
 			return err
 		}
-		if !process.alive() {
+		if !process.Alive() {
 			return fmt.Errorf("sing-box instance stopped before its listener was ready")
 		}
 		connection, err := net.DialTimeout("tcp", address, 150*time.Millisecond)

@@ -2,28 +2,27 @@
 
 ## Project Structure & Module Organization
 
-This is one Go module (`singbox2proxy-docker`), with source and `*_test.go`
-files in the repository root. `main.go` starts the supervisor; `config.go`,
-`subscription.go`, and `links.go` load settings and nodes. `probe.go` tests
-nodes, `supervisor.go` handles selection and failover, `process.go` runs
-sing-box in-process, and `forwarder.go` keeps public HTTP/SOCKS listeners
-stable across node changes. The pinned `github.com/sagernet/sing-box` module
-is linked into the executable; there is no separate sing-box binary or
-temporary JSON config. `Dockerfile`, `docker-compose.yml`, `.env.example`,
-and `security-scan.sh` cover deployment and scanning.
+This Go module (`github.com/kiberdruzhinnik/music-box`) puts the executable in `cmd/music-box/main.go`,
+supervisor logic in `pkg/`, and external tests in `test/`. Within `pkg/`,
+`config.go`, `subscription.go`, and `links.go` load settings and nodes;
+`probe.go` tests nodes; `supervisor.go` handles failover; `process.go` runs
+sing-box in-process; and `forwarder.go` keeps HTTP/SOCKS listeners stable.
+The pinned `github.com/sagernet/sing-box` module is linked into the binary.
+`Dockerfile`, `docker-compose.yml`, and `.env.example` cover deployment;
+`helpers/security-scan.sh` runs security scans.
 
 ## Build, Test, and Development Commands
 
 Run these commands from the repository root:
 
 ```sh
-gofmt -w *.go                 # format changed Go files
+gofmt -w cmd/music-box/*.go pkg/*.go test/*.go
 go test ./...                 # run unit tests
 go vet ./...                  # inspect suspicious Go constructs
-docker build -t local/singbox2proxy-docker:latest .
+docker build -t local/music-box:latest .
 docker compose up -d --build  # run locally using .env
 docker compose logs -f
-sh security-scan.sh local/singbox2proxy-docker:latest
+sh helpers/security-scan.sh local/music-box:latest
 ```
 
 The Docker build supports only `linux/amd64` and `linux/arm64`, runs tagged
@@ -41,7 +40,7 @@ credentials, and subscription contents out of logs and tests. Use
 
 ## Testing Guidelines
 
-Name tests `Test...` in `*_test.go` beside the implementation. Cover parsing,
+Name tests `Test...` in `test/*_test.go`. Cover parsing,
 configuration, in-process sing-box lifecycle, and failure/fallback paths.
 Run `go test ./...` and `go vet ./...` before submitting changes. Rebuild and
 test the image after runtime changes; verify a real SOCKS5 request through
@@ -58,7 +57,7 @@ subscription URLs.
 
 ## Security & Configuration
 
-Run Semgrep and Trivy through `security-scan.sh`; review findings rather than
+Run Semgrep and Trivy through `helpers/security-scan.sh`; review findings rather than
 silencing them. Never commit `.env` or credentials. Compose binds host ports
 to loopback by default; exposing the unauthenticated proxy to a LAN requires
 an explicit binding and firewall rules. Preserve non-root, read-only runtime

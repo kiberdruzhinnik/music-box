@@ -1,9 +1,9 @@
 services:
-  go-sb2p:
+  music-box:
     build:
       context: .
-    image: local/singbox2proxy-docker:1.0.0
-    container_name: singbox2proxy-docker
+    image: local/music-box:1.0.0
+    container_name: music-box
     restart: unless-stopped
     init: true
     env_file:

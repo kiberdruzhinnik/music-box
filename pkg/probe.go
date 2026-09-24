@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"context"
@@ -30,7 +30,7 @@ func httpProbe(ctx context.Context, cfg config, proxyPort int) (time.Duration, e
 	if err != nil {
 		return 0, fmt.Errorf("invalid TCP_TEST_URL")
 	}
-	request.Header.Set("User-Agent", "sb2p-health-probe/1.0")
+	request.Header.Set("User-Agent", "music-box-health-probe/1.0")
 	request.Header.Set("Cache-Control", "no-cache")
 	request.Header.Set("Connection", "close")
 	started := time.Now()
@@ -62,14 +62,14 @@ func (supervisor *supervisor) probeCandidate(ctx context.Context, candidate cand
 		return result
 	}
 	defer supervisor.ports.release(socksPort)
-	process, err := launchProxy(candidate.url, httpPort, socksPort)
+	process, err := LaunchProxy(candidate.url, httpPort, socksPort)
 	if err != nil {
 		result.detail = redactedOutput(err.Error(), candidate.url, supervisor.cfg.subscriptionURL)
 		return result
 	}
-	defer process.stop()
+	defer process.Stop()
 	startupTimeout := min(5*time.Second, supervisor.cfg.probeTimeout)
-	if err = waitForPort(ctx, httpPort, process, startupTimeout); err != nil {
+	if err = WaitForPort(ctx, httpPort, process, startupTimeout); err != nil {
 		result.detail = err.Error()
 		return result
 	}

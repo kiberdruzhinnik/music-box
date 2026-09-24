@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"encoding/base64"
@@ -77,8 +77,8 @@ func collectJSONLinks(value any, links *[]string) {
 	}
 }
 
-// parseSubscription reads plain, JSON, or Base64 share URL subscriptions.
-func parseSubscription(body []byte) []string {
+// ParseSubscription reads plain, JSON, or Base64 share URL subscriptions.
+func ParseSubscription(body []byte) []string {
 	text := strings.TrimPrefix(strings.TrimSpace(string(body)), "\ufeff")
 	links := shareLines(text)
 	if len(links) == 0 && (strings.HasPrefix(text, "[") || strings.HasPrefix(text, "{")) {

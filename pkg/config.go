@@ -1,4 +1,4 @@
-package main
+package proxy
 
 import (
 	"fmt"
@@ -80,7 +80,7 @@ func loadConfig() (config, error) {
 		cfg.testURL = "https://www.gstatic.com/generate_204"
 	}
 	if cfg.subscriptionUserAgent == "" {
-		cfg.subscriptionUserAgent = "singbox2proxy-supervisor/1.0"
+		cfg.subscriptionUserAgent = "music-box-supervisor/1.0"
 	}
 	if cfg.subscriptionURL == "" && cfg.upstreamURL == "" || cfg.subscriptionURL != "" && cfg.upstreamURL != "" {
 		return config{}, fmt.Errorf("set exactly one of SUBSCRIPTION_URL or UPSTREAM_URL")
@@ -119,8 +119,8 @@ func loadConfig() (config, error) {
 		{"PROBE_ATTEMPTS", 2, 1, &cfg.probeAttempts},
 		{"PROBE_CONCURRENCY", 4, 1, &cfg.probeConcurrency},
 		{"MAX_CANDIDATES", 0, 0, &cfg.maxCandidates},
-		{"SB2P_INTERNAL_SOCKS_PORT", 11080, 1, &cfg.internalSOCKSPort},
-		{"SB2P_INTERNAL_HTTP_PORT", 18080, 1, &cfg.internalHTTPPort},
+		{"MUSIC_BOX_INTERNAL_SOCKS_PORT", 11080, 1, &cfg.internalSOCKSPort},
+		{"MUSIC_BOX_INTERNAL_HTTP_PORT", 18080, 1, &cfg.internalHTTPPort},
 	}
 	for _, setting := range integers {
 		value, parseErr := envInt(setting.name, setting.fallback, setting.minimum)
