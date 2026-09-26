@@ -16,12 +16,14 @@ func Run(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	socks, err := StartForwarder(ctx, 1080, cfg.internalSOCKSPort)
+	limits := ForwarderOptions{MaxConnections: cfg.maxConnections, HandshakeTimeout: cfg.handshakeTimeout, IdleTimeout: cfg.clientIdleTimeout, Protocol: "socks"}
+	socks, err := StartForwarderWithOptions(ctx, 1080, cfg.internalSOCKSPort, limits)
 	if err != nil {
 		return err
 	}
 	defer socks.Close()
-	httpForwarder, err := StartForwarder(ctx, 8080, cfg.internalHTTPPort)
+	limits.Protocol = "http"
+	httpForwarder, err := StartForwarderWithOptions(ctx, 8080, cfg.internalHTTPPort, limits)
 	if err != nil {
 		return err
 	}

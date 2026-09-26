@@ -50,7 +50,7 @@ func TestShareURLFamilies(t *testing.T) {
 		"ss-old":   "ss://" + legacySS,
 		"tuic":     "tuic://e2fd90f0-9d1a-4492-b6b3-a03a9d1d6b50:secret@example.com:443?congestion_control=bbr",
 		"wg":       fmt.Sprintf("wg://%s@example.com:51820?public_key=%s&local_address=172.16.0.2%%2F32", privateKey, publicKey),
-		"ssh":      "ssh://user:secret@example.com:22",
+		"ssh":      "ssh://user:secret@example.com:22?host_key=" + url.QueryEscape(testHostKey(t)),
 		"http":     "http://user:secret@example.com:8080",
 		"https":    "https://user:secret@example.com:443",
 		"socks4":   "socks4://example.com:1080",

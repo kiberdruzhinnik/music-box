@@ -6,6 +6,9 @@ import (
 	"net/url"
 	"strconv"
 	"strings"
+
+	"github.com/sagernet/sing-box/transport/sip003"
+	"golang.org/x/crypto/ssh"
 )
 
 // linkConfig contains the sing-box target produced from one share URL.
@@ -254,15 +257,58 @@ func parseShadowsocks(raw string) (map[string]any, error) {
 	query := parsed.Query()
 	if pluginValue := query.Get("plugin"); pluginValue != "" {
 		plugin, options, hasOptions := strings.Cut(pluginValue, ";")
-		outbound["plugin"] = plugin
 		if !hasOptions {
 			options = queryFirst(query, "plugin_opts", "plugin-opts")
 		}
+		if err := validatePluginOptions(plugin, options); err != nil {
+			return nil, err
+		}
+		outbound["plugin"] = plugin
 		if options != "" {
 			outbound["plugin_opts"] = options
 		}
 	}
 	return outbound, nil
+}
+
+// validatePluginOptions allows only network and inline-data options after SIP003 decoding.
+func validatePluginOptions(plugin, options string) error {
+	var allowed map[string]bool
+	switch plugin {
+	case "v2ray-plugin":
+		allowed = map[string]bool{"tls": true, "certRaw": true, "mode": true, "host": true, "path": true, "mux": true}
+	case "obfs-local":
+		allowed = map[string]bool{"obfs": true, "obfs-host": true}
+	default:
+		return fmt.Errorf("unsupported Shadowsocks plugin")
+	}
+	parsed, err := sip003.ParsePluginOptions(options)
+	if err != nil {
+		return fmt.Errorf("invalid Shadowsocks plugin options")
+	}
+	for key := range parsed {
+		if !allowed[key] {
+			return fmt.Errorf("unsupported Shadowsocks plugin option")
+		}
+	}
+	return nil
+}
+
+// sshHostKeys validates and canonicalizes explicitly provisioned server public keys.
+func sshHostKeys(query url.Values) ([]string, error) {
+	values := query["host_key"]
+	if len(values) == 0 {
+		return nil, fmt.Errorf("SSH link requires a trusted host_key")
+	}
+	keys := make([]string, 0, len(values))
+	for _, value := range values {
+		key, _, options, rest, err := ssh.ParseAuthorizedKey([]byte(value))
+		if err != nil || len(options) != 0 || len(strings.TrimSpace(string(rest))) != 0 {
+			return nil, fmt.Errorf("invalid SSH host_key")
+		}
+		keys = append(keys, strings.TrimSpace(string(ssh.MarshalAuthorizedKey(key))))
+	}
+	return keys, nil
 }
 
 // parseProxyLink converts every supported share URL to a sing-box target.
@@ -421,7 +467,12 @@ func parseProxyLink(raw string) (linkConfig, error) {
 		if username == "" {
 			return linkConfig{}, fmt.Errorf("SSH link is missing its user name")
 		}
+		keys, err := sshHostKeys(query)
+		if err != nil {
+			return linkConfig{}, err
+		}
 		base["type"] = "ssh"
+		base["host_key"] = keys
 		base["user"] = username
 		if password != "" {
 			base["password"] = password

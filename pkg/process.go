@@ -33,16 +33,16 @@ func LaunchProxy(link string, httpPort, socksPort int) (*ProxyProcess, error) {
 	options, err := boxjson.UnmarshalExtendedContext[option.Options](ctx, configJSON)
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("parse sing-box config: %w", err)
+		return nil, fmt.Errorf("invalid sing-box configuration")
 	}
 	instance, err := box.New(box.Options{Context: ctx, Options: options})
 	if err != nil {
 		cancel()
-		return nil, fmt.Errorf("create sing-box instance: %w", err)
+		return nil, fmt.Errorf("could not create sing-box instance")
 	}
 	if err = instance.Start(); err != nil {
 		cancel()
-		return nil, fmt.Errorf("start sing-box instance: %w", err)
+		return nil, fmt.Errorf("could not start sing-box instance")
 	}
 	return &ProxyProcess{instance: instance, cancel: cancel, done: make(chan struct{})}, nil
 }

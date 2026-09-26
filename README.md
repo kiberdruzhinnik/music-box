@@ -105,6 +105,26 @@ options), TUIC, WireGuard, SSH, HTTP/HTTPS, SOCKS4/5, and Naive HTTPS share
 URLs are supported. Clash/Mihomo YAML proxy objects are not converted; use a
 subscription endpoint that returns share URLs.
 
+SSH URLs require a URL-encoded `host_key` query parameter containing the server's
+OpenSSH public host key (for example, `ssh-ed25519 ...`). Obtain and verify the
+key through a trusted channel before adding it to a direct URL or subscription;
+never trust a key learned from the connection being verified. Repeat `host_key`
+to allow multiple verified keys during rotation. Missing or invalid keys are
+rejected; a mismatching server cannot receive the SSH password.
+
+Shadowsocks plugins accept only `obfs-local` (`obfs`, `obfs-host`) and
+`v2ray-plugin` (`tls`, `certRaw`, `mode`, `host`, `path`, `mux`). Local certificate
+paths (`cert`) and unknown options are rejected, including escaped spellings.
+Use `certRaw` for inline certificate data. Proxy construction errors are logged
+as safe categories without raw dependency error contents.
+
+Each public listener accepts at most `MAX_CLIENT_CONNECTIONS` simultaneous
+clients (256 by default). Incomplete initial HTTP headers or SOCKS requests
+expire after `CLIENT_HANDSHAKE_TIMEOUT_SECONDS` (15). Established connections
+have no fixed lifetime, but expire after `CLIENT_IDLE_TIMEOUT_SECONDS` (300)
+without traffic in either direction. Increase the idle timeout for applications
+that need longer silent tunnels. Shutdown closes existing forwarded connections.
+
 ## Build and verify
 
 The image supports `linux/amd64` and `linux/arm64` only.

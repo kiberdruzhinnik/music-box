@@ -29,6 +29,9 @@ type config struct {
 	subscriptionUserAgent  string
 	internalSOCKSPort      int
 	internalHTTPPort       int
+	maxConnections         int
+	handshakeTimeout       time.Duration
+	clientIdleTimeout      time.Duration
 }
 
 // envInt reads an integer setting and enforces its minimum value.
@@ -101,6 +104,8 @@ func loadConfig() (config, error) {
 		{"HEALTHCHECK_RETRY_DELAY_SECONDS", 2, 1, &cfg.healthRetryDelay},
 		{"PROBE_TIMEOUT_SECONDS", 8, 1, &cfg.probeTimeout},
 		{"UNAVAILABLE_RETRY_SECONDS", 30, 5, &cfg.unavailableRetry},
+		{"CLIENT_HANDSHAKE_TIMEOUT_SECONDS", 15, 1, &cfg.handshakeTimeout},
+		{"CLIENT_IDLE_TIMEOUT_SECONDS", 300, 1, &cfg.clientIdleTimeout},
 	}
 	for _, setting := range seconds {
 		value, parseErr := envInt(setting.name, setting.fallback, setting.minimum)
@@ -119,6 +124,7 @@ func loadConfig() (config, error) {
 		{"PROBE_ATTEMPTS", 2, 1, &cfg.probeAttempts},
 		{"PROBE_CONCURRENCY", 4, 1, &cfg.probeConcurrency},
 		{"MAX_CANDIDATES", 0, 0, &cfg.maxCandidates},
+		{"MAX_CLIENT_CONNECTIONS", 256, 1, &cfg.maxConnections},
 		{"MUSIC_BOX_INTERNAL_SOCKS_PORT", 11080, 1, &cfg.internalSOCKSPort},
 		{"MUSIC_BOX_INTERNAL_HTTP_PORT", 18080, 1, &cfg.internalHTTPPort},
 	}
